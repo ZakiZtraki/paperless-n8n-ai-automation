@@ -1,0 +1,218 @@
+# Paperless-n8n AI Document Automation - Git Ignore
+
+# ========================================
+# SECURITY: Never commit these files
+# ========================================
+
+# Environment files with secrets
+.env
+.env.local
+.env.paperless
+.env.*.local
+*.env
+
+# API tokens and credentials
+*token*.txt
+*secret*.txt
+*password*.txt
+credentials.json
+auth.json
+
+# ========================================
+# Personal/Test Data
+# ========================================
+
+# PDF test documents
+*.pdf
+*.PDF
+
+# Personal data exports
+*personal*.json
+*private*.txt
+
+# ========================================
+# IDE and Editor Files
+# ========================================
+
+# Claude Code
+.claude/
+
+# ZenCoder/ZenFlow (custom IDEs)
+.zencoder/
+.zenflow/
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ========================================
+# Python
+# ========================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+virtualenv/
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ========================================
+# Node.js / JavaScript
+# ========================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ========================================
+# n8n Specific
+# ========================================
+
+# n8n local database (if running locally)
+.n8n/
+n8n-*.db
+n8n-*.db-shm
+n8n-*.db-wal
+
+# n8n local files
+.n8n-local/
+
+# ========================================
+# Backups and Temporary Files
+# ========================================
+
+# Workflow backups
+*_backup_*.json
+*.backup
+*.bak
+*.old
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# ========================================
+# Operating System Files
+# ========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ========================================
+# Git
+# ========================================
+
+# Git conflict markers
+*.orig
+
+# ========================================
+# Project Specific
+# ========================================
+
+# Backup directory from cleanup process
+github_cleanup_backup/
+
+# Don't commit these specific files
+check_if_node.py
+test_api_token.sh
+
+# Keep workflow source JSON files but ignore large intermediate files
+# Uncomment if you want to exclude all intermediate workflow versions:
+# paperless_workflow-v13*.json
+# paperless_workflow-v14-*.json
+
+# ========================================
+# ALLOWED FILES (for reference - these CAN be committed)
+# ========================================
+# - README.md
+# - CLAUDE.md
+# - *.md documentation files (after cleaning)
+# - *.py scripts (after removing hardcoded secrets)
+# - *.sh scripts (after updating to use .env)
+# - paperless_workflow-v14.1-both-nodes-fixed.json (final version)
+# - .env.paperless.example (template)
+# - .gitignore (this file)

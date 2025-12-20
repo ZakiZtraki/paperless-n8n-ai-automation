@@ -1,0 +1,963 @@
+{
+  "name": "Paperless AI Processing v14.1 (HTTP Nodes)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Consolidated AI Results Processor - Handles all processing in one node\nconsole.log('=== CONSOLIDATED AI RESULTS PROCESSOR ===');\nconst startTime = Date.now();\n\nlet aiResults = {};\nlet processingErrors = [];\n\ntry {\n  const input = $input.first();\n  if (!input || !input.json) {\n    throw new Error('No input data received');\n  }\n\n  console.log('Input structure - Keys:', Object.keys(input.json));\n\n  // Capture document_id from input (single extraction)\n  const documentId = input.json.document_id || null;\n  console.log('Document ID:', documentId);\n\n  // Extract AI response from \"output\" field\n  let aiResponseText = input.json.output || input.json;\n  console.log('Content type:', typeof aiResponseText);\n\n  // Parse the AI response\n  let parsedResults;\n\n  if (typeof aiResponseText === 'object') {\n    parsedResults = aiResponseText;\n  } else if (typeof aiResponseText === 'string') {\n    console.log('Raw AI response (first 200 chars):', aiResponseText.substring(0, 200));\n\n    // Remove markdown code blocks\n    let jsonText = aiResponseText\n      .replace(/```json\\n?/g, '')\n      .replace(/```\\n?/g, '')\n      .trim();\n\n    // Extract JSON from text - find everything between first { and last }\n    const firstBrace = jsonText.indexOf('{');\n    const lastBrace = jsonText.lastIndexOf('}');\n\n    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {\n      jsonText = jsonText.substring(firstBrace, lastBrace + 1);\n      console.log('✅ Extracted JSON from text (first 100 chars):', jsonText.substring(0, 100));\n    }\n\n    parsedResults = JSON.parse(jsonText);\n    console.log('✅ Parsed successfully');\n  }\n\n  aiResults = parsedResults;\n\n} catch (error) {\n  console.error('Error:', error.message);\n  processingErrors.push(`Parsing error: ${error.message}`);\n  aiResults = {\n    correspondent: { name: 'Unknown', confidence: 0, note: '' },\n    document_analysis: { confidence: 0.1, category: 'unknown', summary: 'Parsing failed' },\n    document_type: { recommended_id: null, confidence: 0, create_new: false },\n    custom_fields: { field_updates: {}, confidence: 0 },\n    tags: { existing_tag_names: [], new_tags_needed: [], confidence: 0 }\n  };\n}\n\n// Get document_id from input\nconst input = $input.first();\nconst documentId = input?.json?.document_id || null;\n\n// Build final sanitized structure\nconst sanitizedResults = {\n  document_id: documentId,\n\n  correspondent: {\n    name: String(aiResults.correspondent?.name || 'Unknown'),\n    confidence: Number(aiResults.correspondent?.confidence) || 0,\n    note: String(aiResults.correspondent?.note || '')\n  },\n\n  document_analysis: {\n    confidence: Number(aiResults.document_analysis?.confidence) || 0.5,\n    category: String(aiResults.document_analysis?.category || 'unknown'),\n    summary: String(aiResults.document_analysis?.summary || 'Analysis completed')\n  },\n\n  document_type: {\n    recommended_id: aiResults.document_type?.recommended_id || null,\n    recommended_name: String(aiResults.document_type?.recommended_name || ''),\n    confidence: Number(aiResults.document_type?.confidence) || 0,\n    create_new: Boolean(aiResults.document_type?.create_new),\n    new_type_suggestion: aiResults.document_type?.new_type_suggestion || null\n  },\n\n  custom_fields: {\n    field_updates: aiResults.custom_fields?.field_updates || {},\n    confidence: Number(aiResults.custom_fields?.confidence) || 0,\n    new_fields_needed: aiResults.custom_fields?.new_fields_needed || []\n  },\n\n  tags: {\n    existing_tag_names: aiResults.tags?.existing_tag_names || [],\n    new_tags_needed: aiResults.tags?.new_tags_needed || [],\n    confidence: Number(aiResults.tags?.confidence) || 0\n  },\n\n  processing_notes: String(aiResults.processing_notes || 'Processing completed'),\n  processing_errors: processingErrors,\n  processing_timestamp: new Date().toISOString(),\n  processing_duration_ms: Date.now() - startTime\n};\n\nconsole.log('=== PARSING COMPLETE ===');\nconsole.log(`Document ID: ${documentId}`);\nconsole.log(`Correspondent: ${sanitizedResults.correspondent.name} (confidence: ${sanitizedResults.correspondent.confidence})`);\nconsole.log(`Duration: ${sanitizedResults.processing_duration_ms}ms`);\n\nreturn { json: sanitizedResults };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1632,
+        192
+      ],
+      "id": "d2983366-11d4-452a-82c3-169e444d86fb",
+      "name": "Process AI Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consolidated Processing - All branches in one node (WITH ENHANCED DATE FIX)\nconsole.log('=== CONSOLIDATED PROCESSOR ===');\nconst processingData = $json;\n\nlet result = {\n  document_id: processingData.document_id,\n  update_payload: {},\n  has_updates: false,\n  processing_summary: {\n    document_type: {},\n    custom_fields: {},\n    tags: {},\n    processing_errors: []\n  },\n  overall_success: false\n};\n\n// ===== DOCUMENT TYPE PROCESSING =====\ntry {\n  const documentTypeData = processingData.document_type;\n\n  if (!documentTypeData) {\n    throw new Error('No document type data found');\n  }\n\n  if (documentTypeData.recommended_id && documentTypeData.confidence > 0.6) {\n    result.update_payload.document_type = documentTypeData.recommended_id;\n    result.has_updates = true;\n    result.processing_summary.document_type = {\n      status: 'updated',\n      type_id: documentTypeData.recommended_id,\n      type_name: documentTypeData.recommended_name,\n      confidence: documentTypeData.confidence,\n      action: 'using_existing_type'\n    };\n    console.log(`✅ Document type: Using \"${documentTypeData.recommended_name}\" (ID: ${documentTypeData.recommended_id})`);\n  } else if (documentTypeData.create_new && documentTypeData.new_type_suggestion) {\n    result.processing_summary.document_type = {\n      status: 'not_updated',\n      reason: 'New document type creation not implemented',\n      new_type_suggestion: documentTypeData.new_type_suggestion\n    };\n    console.log('⚠️ Document type: Needs new type creation (not implemented)');\n  } else {\n    result.processing_summary.document_type = {\n      status: 'not_updated',\n      reason: 'No valid recommendation or confidence too low',\n      confidence: documentTypeData.confidence\n    };\n    console.log('ℹ️ Document type: No update needed');\n  }\n} catch (error) {\n  result.processing_summary.processing_errors.push(`Document Type: ${error.message}`);\n  result.processing_summary.document_type = {\n    status: 'error',\n    error: error.message\n  };\n  console.error('❌ Document Type Error:', error.message);\n}\n\n// ===== CUSTOM FIELDS PROCESSING =====\ntry {\n  const customFieldsData = processingData.custom_fields;\n\n  if (!customFieldsData) {\n    throw new Error('No custom fields data found');\n  }\n\n  const fieldUpdates = customFieldsData.field_updates || {};\n  const fieldCount = Object.keys(fieldUpdates).length;\n\n  if (fieldCount > 0 && customFieldsData.confidence > 0.5) {\n    // Validate and process field updates\n    const validUpdates = [];\n    let validFieldCount = 0;\n\n    for (const [fieldId, fieldValue] of Object.entries(fieldUpdates)) {\n      const numericFieldId = parseInt(fieldId);\n      if (!isNaN(numericFieldId) && fieldValue !== null && fieldValue !== '') {\n        let processedValue = String(fieldValue);\n\n        // ===== ENHANCED DATE FIELD HANDLING =====\n        // 1. European format: DD.MM.YYYY → YYYY-MM-DD\n        if (/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(processedValue)) {\n          const parts = processedValue.split('.');\n          const day = parts[0];\n          const month = parts[1];\n          const year = parts[2];\n          processedValue = `${year}-${month}-${day}`;\n          console.log(`📅 Field ${numericFieldId}: Converted European date \"${fieldValue}\" → \"${processedValue}\"`);\n        }\n        // 2. Partial format: YYYY-MM → YYYY-MM-01\n        else if (/^\\d{4}-\\d{2}$/.test(processedValue)) {\n          processedValue = `${processedValue}-01`;\n          console.log(`📅 Field ${numericFieldId}: Converted partial date \"${fieldValue}\" → \"${processedValue}\"`);\n        }\n        // 3. US format: MM/DD/YYYY → YYYY-MM-DD\n        else if (/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(processedValue)) {\n          const parts = processedValue.split('/');\n          const month = parts[0];\n          const day = parts[1];\n          const year = parts[2];\n          processedValue = `${year}-${month}-${day}`;\n          console.log(`📅 Field ${numericFieldId}: Converted US date \"${fieldValue}\" → \"${processedValue}\"`);\n        }\n        // 4. Validate it's now in correct YYYY-MM-DD format\n        else if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(processedValue)) {\n          // Check if it looks like a date field but in wrong format\n          if (/\\d{2,4}[.\\-\\/]\\d{1,2}[.\\-\\/]\\d{2,4}/.test(processedValue)) {\n            console.warn(`⚠️ Skipping field ${numericFieldId}: Unrecognized date format \"${fieldValue}\"`);\n            continue;\n          }\n          // Otherwise assume it's a text/number field and keep as-is\n        }\n\n        // Paperless API expects array format: [{\"field\": 21, \"value\": \"...\"}, ...]\n        validUpdates.push({\n          field: numericFieldId,\n          value: processedValue\n        });\n        validFieldCount++;\n      }\n    }\n\n    if (validFieldCount > 0) {\n      result.update_payload.custom_fields = validUpdates;\n      result.has_updates = true;\n      result.processing_summary.custom_fields = {\n        status: 'updated',\n        field_count: validFieldCount,\n        confidence: customFieldsData.confidence\n      };\n      console.log(`✅ Custom fields: Processing ${validFieldCount} field updates (array format)`);\n    } else {\n      result.processing_summary.custom_fields = {\n        status: 'not_updated',\n        reason: 'No valid field updates found'\n      };\n      console.log('⚠️ Custom fields: No valid field updates');\n    }\n  } else {\n    result.processing_summary.custom_fields = {\n      status: 'not_updated',\n      reason: 'No updates needed or confidence too low',\n      confidence: customFieldsData.confidence\n    };\n    console.log('ℹ️ Custom fields: No updates needed');\n  }\n} catch (error) {\n  result.processing_summary.processing_errors.push(`Custom Fields: ${error.message}`);\n  result.processing_summary.custom_fields = {\n    status: 'error',\n    error: error.message\n  };\n  console.error('❌ Custom Fields Error:', error.message);\n}\n\n// ===== TAGS PROCESSING =====\ntry {\n  const tagsData = processingData.tags;\n\n  if (!tagsData) {\n    throw new Error('No tags data found');\n  }\n\n  const existingTags = tagsData.existing_tag_names || [];\n  const newTags = tagsData.new_tags_needed || [];\n\n  if (existingTags.length > 0 && tagsData.confidence > 0.5) {\n    // Note: Tag name -> ID resolution would be needed for full implementation\n    result.processing_summary.tags = {\n      status: 'identified',\n      tag_names: existingTags,\n      tag_count: existingTags.length,\n      confidence: tagsData.confidence,\n      note: 'Tag updates identified but name->ID resolution not implemented'\n    };\n    console.log(`✅ Tags: Identified ${existingTags.length} existing tags: [${existingTags.join(', ')}]`);\n  } else if (newTags.length > 0) {\n    result.processing_summary.tags = {\n      status: 'needs_new_tags',\n      new_tags: newTags,\n      note: 'New tag creation not implemented'\n    };\n    console.log(`⚠️ Tags: Needs ${newTags.length} new tags (not implemented)`);\n  } else {\n    result.processing_summary.tags = {\n      status: 'not_updated',\n      reason: 'No valid tag recommendations or confidence too low',\n      confidence: tagsData.confidence\n    };\n    console.log('ℹ️ Tags: No updates needed');\n  }\n} catch (error) {\n  result.processing_summary.processing_errors.push(`Tags: ${error.message}`);\n  result.processing_summary.tags = {\n    status: 'error',\n    error: error.message\n  };\n  console.error('❌ Tags Error:', error.message);\n}\n\n// Determine overall success\nconst hasUpdates = Object.keys(result.update_payload).length > 0;\nconst hasNoErrors = result.processing_summary.processing_errors.length === 0;\nresult.overall_success = hasUpdates || hasNoErrors;\n\nresult.processing_timestamp = new Date().toISOString();\nresult.workflow_version = 'v14-entity-based-architecture';\n\nconsole.log('=== CONSOLIDATED PROCESSING COMPLETE ===');\nconsole.log(`Has updates: ${hasUpdates}`);\nconsole.log(`Errors: ${result.processing_summary.processing_errors.length}`);\nconsole.log(`Overall success: ${result.overall_success}`);\n\nif (result.processing_summary.processing_errors.length > 0) {\n  console.warn('Errors encountered:');\n  result.processing_summary.processing_errors.forEach(error => console.warn(`- ${error}`));\n}\n\n\n// === ENHANCED STORAGE CLASSIFICATION ===\ntry {\n  console.log('🔍 Starting enhanced classification...');\n\n  // Get field IDs - UPDATED WITH ACTUAL VALUES\n  const FIELD_IDS = {\n    SLA_DEADLINE: 34,\n    OBLIGATION_TYPE: 35,\n    RISK_LEVEL: 36,\n    CORRESPONDENT_CATEGORY: 37,\n    MONITORING_STATUS: 38\n  };\n\n  // Option ID mappings for select fields (Paperless API requirement)\n  const OPTION_ID_MAPS = {\n    OBLIGATION_TYPE: {\n      'hard_obligation': 'YumCdzEuieiKcVDI',\n      'soft_tracking': '0IWw2uQwjqwdrFXE',\n      'informational': 'A9luuKq3diPjVhDg',\n      'none': 'Bvz8jz0qPprJ24SR'\n    },\n    RISK_LEVEL: {\n      'critical': 'InCVxa5Or3nlDhOs',\n      'high': '619ScM1aAKiflS2K',\n      'medium': 'Du94S1fVhX3bxWZD',\n      'low': 'MgT3bokwRhrqeMR8'\n    },\n    CORRESPONDENT_CATEGORY: {\n      'government': 'zZekIjuwF7fPPmdB',\n      'insurance': 'yMb0TCXasw3EWdII',\n      'financial': 'YrC7OBpHTYzgHUQw',\n      'health': 'slMEY7n0P3B3Ul7E',\n      'commercial': '3XhikkXVah7LLNPe',\n      'technical': 'Sj1ifAGzeqwsD4pu'\n    },\n    MONITORING_STATUS: {\n      'active': 'BKirpy7MKQUqmhMO',\n      'pending': 'JF2k0BC4aUwXdGGY',\n      'completed': '6pXkC10tBVZYtN0X',\n      'archived': 'vww4XAuit0spYnJY'\n    }\n  };\n\n\n  // Extract document content and metadata\n  const documentContent = processingData.document_analysis?.summary || '';\n  // ===== UPDATED CORRESPONDENT EXTRACTION =====\n  // Priority:\n  // 1. Use AI-extracted correspondent.name if available and confidence > 0.6\n  // 2. Fall back to document_analysis.category (old behavior)\n  // 3. Fall back to \"Unknown\"\n  let correspondentName = 'Unknown';\n\n  if (processingData.correspondent?.name && processingData.correspondent.confidence > 0.6) {\n    correspondentName = processingData.correspondent.name;\n    console.log(`✅ Using AI-extracted correspondent: \"${correspondentName}\" (confidence: ${processingData.correspondent.confidence})`);\n    if (processingData.correspondent.note) {\n      console.log(`   Note: ${processingData.correspondent.note}`);\n    }\n  } else if (processingData.document_analysis?.category) {\n    correspondentName = processingData.document_analysis.category;\n    console.warn(`⚠️ Falling back to document category as correspondent: \"${correspondentName}\"`);\n    console.warn('   This may be incorrect - check AI correspondent extraction');\n  } else {\n    console.warn('⚠️ No correspondent information found, using \"Unknown\"');\n  }\n\n  // Validate correspondent is not a document type\n  const commonDocTypes = ['invoice', 'letter', 'contract', 'receipt', 'statement', 'document'];\n  if (commonDocTypes.includes(correspondentName.toLowerCase())) {\n    console.error(`❌ INVALID CORRESPONDENT: \"${correspondentName}\" is a document type, not a sender!`);\n    console.error('   Setting correspondent to \"Unknown\" - please fix AI extraction');\n    correspondentName = 'Unknown';\n  }\n\n  // 1. Detect correspondent category\n  const correspondentCategory = detectCorrespondentCategory(correspondentName, documentContent);\n\n  // 2. Classify obligation type\n  const obligationType = classifyObligation(documentContent, correspondentCategory);\n\n  // 3. Assess risk level\n  const riskLevel = assessRiskLevel(documentContent, correspondentCategory, obligationType);\n\n  // 4. Generate storage path\n  const storagePath = generateStoragePath(correspondentCategory, correspondentName, new Date());\n\n  // 5. Calculate SLA deadline (if applicable)\n  const slaDeadline = calculateSLADeadline(riskLevel, obligationType);\n\n  // Create enhanced custom fields array\n  const enhancedFields = [\n    {field: FIELD_IDS.OBLIGATION_TYPE, value: OPTION_ID_MAPS.OBLIGATION_TYPE[obligationType] || obligationType},\n    {field: FIELD_IDS.RISK_LEVEL, value: OPTION_ID_MAPS.RISK_LEVEL[riskLevel] || riskLevel},\n    \n    {field: FIELD_IDS.CORRESPONDENT_CATEGORY, value: OPTION_ID_MAPS.CORRESPONDENT_CATEGORY[correspondentCategory] || correspondentCategory},\n    {field: FIELD_IDS.MONITORING_STATUS, value: OPTION_ID_MAPS.MONITORING_STATUS[\"active\"]}\n  ];\n\n  // Add SLA deadline if calculated\n  if (slaDeadline) {\n    enhancedFields.push({field: FIELD_IDS.SLA_DEADLINE, value: slaDeadline});\n  }\n\n  // Merge with existing custom fields\n  if (!result.update_payload.custom_fields) {\n    result.update_payload.custom_fields = [];\n  }\n\n  result.update_payload.custom_fields = result.update_payload.custom_fields.concat(enhancedFields);\n  result.has_updates = true;\n\n  // Update processing summary\n  result.processing_summary.enhanced_classification = {\n    status: 'success',\n    correspondent_category: correspondentCategory,\n    obligation_type: obligationType,\n    risk_level: riskLevel,\n    storage_path: storagePath,\n    sla_deadline: slaDeadline\n  };\n\n  console.log('✅ Enhanced classification completed');\n  console.log(`📂 Storage Path: ${storagePath}`);\n  console.log(`⚠️  Risk Level: ${riskLevel}`);\n  console.log(`📋 Obligation Type: ${obligationType}`);\n\n  // === PREPARE DATA FOR ENTITY MANAGER ===\n  // Extract primary storage category from storagePath (first segment)\n  const storageCategory = storagePath ? storagePath.split('/')[0] : 'reference-documents';\n\n  // Pass data to Entity Manager\n  result.correspondent_name = correspondentName || 'Unknown';\n  result.correspondent_category = correspondentCategory;\n  result.document_type_name = processingData.document_type?.recommended_name || null;\n  result.document_type_confidence = processingData.document_type?.confidence || 0;\n  result.suggested_tags = processingData.tags?.existing_tag_names || [];\n  result.obligation_type = obligationType;\n  result.risk_level = riskLevel;\n  result.storage_category = storageCategory;\n  result.storage_path_template = storagePath;  // Keep for reference/logging\n\n} catch (error) {\n  console.error('❌ Enhanced classification error:', error.message);\n  result.processing_summary.enhanced_classification = {\n    status: 'error',\n    error: error.message\n  };\n  result.processing_summary.processing_errors.push(`Enhanced Classification: ${error.message}`);\n\n  // Fallback values for Entity Manager if classification fails\n  result.correspondent_name = 'Unknown';\n  result.correspondent_category = 'commercial';\n  result.document_type_name = null;\n  result.document_type_confidence = 0;\n  result.suggested_tags = [];\n  result.obligation_type = 'informational';\n  result.risk_level = 'low';\n  result.storage_category = 'reference-documents';\n  result.storage_path_template = 'reference-documents/unknown';\n}\n\n// === HELPER FUNCTIONS ===\nfunction detectCorrespondentCategory(correspondent, content) {\n  const text = `${correspondent} ${content}`.toLowerCase();\n\n  // Government/Legal patterns\n  if (text.includes('ams') || text.includes('arbeitsmarktservice') ||\n      text.includes('finanzamt') || text.includes('gericht')) {\n    return 'government';\n  }\n\n  // Insurance patterns\n  if (text.includes('helvetia') || text.includes('versicherung') ||\n      text.includes('polizze') || text.includes('prämie')) {\n    return 'insurance';\n  }\n\n  // Financial services patterns\n  if (text.includes('magenta') || text.includes('bank') ||\n      text.includes('rechnung') || text.includes('invoice')) {\n    return 'financial';\n  }\n\n  // Health patterns\n  if (text.includes('wgkk') || text.includes('gesundheit') ||\n      text.includes('e-card') || text.includes('kranken')) {\n    return 'health';\n  }\n\n  // Technical patterns\n  if (text.includes('microsoft') || text.includes('template') ||\n      text.includes('development') || text.includes('software')) {\n    return 'technical';\n  }\n\n  return 'commercial';\n}\n\nfunction classifyObligation(content, correspondentCategory) {\n  const contentLower = content.toLowerCase();\n\n  // Hard obligation indicators\n  const hardIndicators = [\n    'mahnung', 'zahlung', 'termin', 'deadline', 'frist',\n    'vorladung', 'gerichtstermin', 'verpflichtet',\n    'kontrolltermin', 'meldetermin'\n  ];\n\n  // Soft tracking indicators\n  const softIndicators = [\n    'sepa', 'lastschrift', 'eingezogen', 'abbuchung',\n    'information', 'bestätigung', 'benachrichtigung'\n  ];\n\n  // Government documents default to hard obligations\n  if (correspondentCategory === 'government') {\n    return 'hard_obligation';\n  }\n\n  // Check for explicit hard indicators\n  if (hardIndicators.some(indicator => contentLower.includes(indicator))) {\n    return 'hard_obligation';\n  }\n\n  // Check for soft tracking indicators\n  if (softIndicators.some(indicator => contentLower.includes(indicator))) {\n    return 'soft_tracking';\n  }\n\n  // Default classification by category\n  if (correspondentCategory === 'insurance' && contentLower.includes('mahnung')) {\n    return 'hard_obligation';\n  }\n\n  return 'informational';\n}\n\nfunction assessRiskLevel(content, correspondentCategory, obligationType) {\n  const contentLower = content.toLowerCase();\n\n  // Critical risk indicators\n  const criticalIndicators = [\n    'vollstreckung', 'gerichtsvollzieher', 'klage',\n    'zwangsvollstreckung', 'rechtliche schritte'\n  ];\n\n  // High risk indicators\n  const highIndicators = [\n    'letzte mahnung', 'verzug', 'sofortige zahlung',\n    'sperrung', 'mahnung'\n  ];\n\n  // Check for critical patterns\n  if (criticalIndicators.some(indicator => contentLower.includes(indicator))) {\n    return 'critical';\n  }\n\n  // Government documents are high risk by default\n  if (correspondentCategory === 'government') {\n    return 'high';\n  }\n\n  // Check for high risk patterns\n  if (highIndicators.some(indicator => contentLower.includes(indicator))) {\n    return 'high';\n  }\n\n  // Risk based on obligation type\n  if (obligationType === 'hard_obligation') {\n    return 'medium';\n  }\n\n  return 'low';\n}\n\nfunction generateStoragePath(category, correspondent, date) {\n  const year = date.getFullYear();\n  const month = String(date.getMonth() + 1).padStart(2, '0');\n  const monthName = date.toLocaleString('en', { month: 'long' }).toLowerCase();\n\n  // Normalize correspondent name\n  const correspondentNormalized = correspondent\n    .toLowerCase()\n    .replace(/[^a-zA-Z0-9]/g, '-')\n    .replace(/-+/g, '-')\n    .replace(/^-|-$/g, '');\n\n  // Category to primary path mapping\n  const categoryPaths = {\n    'government': 'legal-obligations',\n    'insurance': 'financial-tracking/insurance',\n    'financial': 'financial-tracking',\n    'health': 'reference-documents/health',\n    'commercial': 'reference-documents',\n    'technical': 'reference-documents/technical'\n  };\n\n  const primaryPath = categoryPaths[category] || 'reference-documents';\n\n  // Special handling for government subcategories\n  if (category === 'government') {\n    if (correspondent.toLowerCase().includes('ams')) {\n      return `legal-obligations/ams/${year}/${month}-${monthName}`;\n    } else if (correspondent.toLowerCase().includes('finanzamt')) {\n      const quarter = Math.ceil(parseInt(month) / 3);\n      return `legal-obligations/tax/${year}/q${quarter}`;\n    } else {\n      return `legal-obligations/general/${year}/${month}-${monthName}`;\n    }\n  }\n\n  // Standard path structure\n  return `${primaryPath}/${correspondentNormalized}/${year}/${month}-${monthName}`;\n}\n\nfunction calculateSLADeadline(riskLevel, obligationType) {\n  if (obligationType !== 'hard_obligation') {\n    return null; // No SLA for non-obligations\n  }\n\n  const today = new Date();\n  let daysToAdd = 0;\n\n  switch (riskLevel) {\n    case 'critical':\n      daysToAdd = 1; // Same day/next day\n      break;\n    case 'high':\n      daysToAdd = 3; // 3 business days\n      break;\n    case 'medium':\n      daysToAdd = 7; // 1 week\n      break;\n    case 'low':\n      daysToAdd = 14; // 2 weeks\n      break;\n    default:\n      return null;\n  }\n\n  const deadline = new Date(today);\n  deadline.setDate(deadline.getDate() + daysToAdd);\n\n  return deadline.toISOString().split('T')[0]; // Return YYYY-MM-DD format\n}\n\n\n\n  return { json: result };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        192
+      ],
+      "id": "07d4abe1-58da-400f-900e-cc7aca32c3f0",
+      "name": "Consolidated Processor",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-updates-check",
+              "leftValue": "={{ $json.has_updates }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a44ab2f4-5ffd-4bbf-adce-9aaa8e75956d",
+      "name": "Check if Updates Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://paperless.zenmedia.live/api/documents/{{ $json.document_id }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.update_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -576,
+        96
+      ],
+      "id": "e1ccef4c-5a44-497a-95c7-fd8a542127eb",
+      "name": "Update Document",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final Processing Report Generator\nconst inputData = $input.first()?.json;\n\nif (!inputData) {\n  return {\n    json: {\n      status: 'error',\n      message: 'No input data for final processing',\n      timestamp: new Date().toISOString()\n    }\n  };\n}\n\n// Determine the source of this final processing\nlet processingSummary;\nlet documentId;\nlet finalStatus;\n\n// Check if this came from Update Document (HTTP response) or directly from Consolidated Processor\nconst isHttpResponse = inputData.statusCode !== undefined || inputData.id !== undefined;\n\nif (isHttpResponse) {\n  // This came from an HTTP update request\n  const httpResult = inputData;\n  const isSuccessful = httpResult.statusCode ? (httpResult.statusCode >= 200 && httpResult.statusCode < 300) : (httpResult.id !== undefined);\n  \n  // Get the original processing data from Consolidated Processor\n  const originalData = $('Consolidated Processor').first()?.json;\n  \n  processingSummary = {\n    workflow_path: 'document_updated',\n    document_id: originalData?.document_id || httpResult.id || 'unknown',\n    update_attempted: true,\n    update_successful: isSuccessful,\n    http_status: httpResult.statusCode || 200,\n    processing_summary: originalData?.processing_summary || {},\n    api_response: isSuccessful ? 'Document updated successfully' : `Update failed: HTTP ${httpResult.statusCode}`,\n    update_payload: originalData?.update_payload || {},\n    timestamp: new Date().toISOString()\n  };\n  \n  finalStatus = isSuccessful ? 'completed_with_updates' : 'completed_with_update_error';\n  \n  // Log success or errors\n  if (isSuccessful) {\n    console.log(`✅ Document ${processingSummary.document_id} updated successfully`);\n    console.log('Updates applied:', JSON.stringify(processingSummary.update_payload, null, 2));\n  } else if (httpResult.error) {\n    console.error('Document update failed:', httpResult.error);\n    processingSummary.error_details = httpResult.error;\n  }\n  \n} else {\n  // This came directly from the consolidator (no updates path)\n  processingSummary = {\n    workflow_path: 'no_updates_needed',\n    document_id: inputData.document_id || 'unknown',\n    update_attempted: false,\n    update_successful: null,\n    processing_summary: inputData.processing_summary || {},\n    reason: 'No valid updates identified by AI analysis',\n    timestamp: new Date().toISOString()\n  };\n  \n  finalStatus = inputData.overall_success ? 'completed_no_updates' : 'completed_with_errors';\n  console.log(`ℹ️ Document ${processingSummary.document_id} - No updates needed`);\n}\n\n// Generate final report\nconst finalReport = {\n  status: finalStatus,\n  document_id: processingSummary.document_id,\n  processing_complete: true,\n  ...processingSummary\n};\n\nconsole.log('=== WORKFLOW COMPLETE ===');\nconsole.log(`Final Status: ${finalStatus}`);\nconsole.log(`Document ID: ${processingSummary.document_id}`);\nconsole.log(`Updates Applied: ${processingSummary.update_attempted}`);\n\nreturn { json: finalReport };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        192
+      ],
+      "id": "15320646-190c-4dcf-8316-58791227bddb",
+      "name": "Final Processing Report",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "paperless/doc-added",
+        "authentication": "headerAuth",
+        "options": {
+          "responseData": "OK"
+        }
+      },
+      "id": "d241a9f7-a1a4-460f-8344-048734fd422d",
+      "name": "Paperless Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -3072,
+        192
+      ],
+      "webhookId": "877dcb88-bcf2-426c-ae08-573105047fc8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "88d4WF3HCiXbAAyJ",
+          "name": "n8n_API_Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "token-check",
+              "leftValue": "d9bf2199-6d52-4c0c-be72-4443cc6c2dea",
+              "rightValue": "={{ $json.headers['x-api-key'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "57e80c82-44f9-403d-b4ba-a0997762da00",
+      "name": "Validate Webhook Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.doc_url.replace('/documents/', '/api/documents/') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "ecf6d50f-f7b4-4e64-be43-7304f3f20d7b",
+      "name": "Fetch Document Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -2624,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced AI Prompt with Error Handling + CORRESPONDENT EXTRACTION\nconst inputItems = $input.all();\nlet documentData = null;\nlet customFieldsData = [];\n\n// Find document data with fallbacks\ntry {\n  documentData = inputItems.find(item => item.json && (item.json.content || item.json.title));\n  if (!documentData) {\n    throw new Error('No document data found in inputs');\n  }\n} catch (error) {\n  console.error('Document data error:', error.message);\n  // Create minimal fallback structure\n  documentData = {\n    json: {\n      id: 'unknown',\n      title: 'Unknown Document',\n      content: '',\n      correspondent: 'Unknown',\n      document_type: 'Unknown'\n    }\n  };\n}\n\n// Find custom fields data with fallbacks\ntry {\n  const customFieldsItem = inputItems.find(item => item.json && (Array.isArray(item.json.results) || Array.isArray(item.json)));\n  if (customFieldsItem) {\n    customFieldsData = customFieldsItem.json.results || customFieldsItem.json || [];\n  }\n} catch (error) {\n  console.warn('Custom fields data not found, continuing with empty array');\n  customFieldsData = [];\n}\n\n// Safely extract document properties\nconst documentText = (documentData.json.content || '').substring(0, 2000); // Limit content length\nconst documentTitle = documentData.json.title || 'Untitled Document';\nconst correspondent = documentData.json.correspondent || 'Unknown';\nconst documentType = documentData.json.document_type || 'Unknown';\nconst documentId = documentData.json.id;\n\nif (!documentId || documentId === 'unknown') {\n  console.warn('Document ID is missing or invalid, workflow may have limited functionality');\n}\n\n// Build comprehensive prompt\nconst prompt = `\nAI document analyzer for Paperless-ngx. IMPORTANT: Return valid JSON ONLY.\n\nDocument Information:\n- Title: ${documentTitle}\n- Current Type: ${documentType}\n- Current Correspondent: ${correspondent}\n- Content Preview: ${documentText}\n- Available Custom Fields: ${customFieldsData.length} fields\n\nINSTRUCTIONS:\n1. Analyze the document content thoroughly\n2. **CRITICAL**: Identify the CORRESPONDENT (sender/company/organization) - this is WHO sent or created the document\n   - Examples: \"Amazon\", \"Magenta Telekom\", \"AMS\", \"Helvetia Insurance\", \"Microsoft\"\n   - The correspondent is NOT the document type (Invoice, Letter, etc.)\n   - If you cannot determine the sender, use \"Unknown\" as correspondent name\n3. Identify the DOCUMENT TYPE (what kind of document it is)\n   - Examples: \"Invoice\", \"Letter\", \"Contract\", \"Receipt\", \"Statement\"\n4. Use available tools to get existing entities (document_types, custom_fields, tags)\n5. Prioritize using existing entities over creating new ones\n6. Return structured JSON with confidence scores\n7. Handle missing data gracefully\n\nOUTPUT REQUIREMENTS:\nReturn a JSON object with this exact structure:\n{\n  \"correspondent\": {\n    \"name\": \"Company or Organization Name\",\n    \"confidence\": 0.85,\n    \"note\": \"Explain how you identified the correspondent\"\n  },\n  \"document_analysis\": {\n    \"confidence\": 0.85,\n    \"category\": \"detected_category\",\n    \"summary\": \"brief_analysis_summary\"\n  },\n  \"document_type\": {\n    \"recommended_id\": 123,\n    \"recommended_name\": \"existing_type_name\",\n    \"confidence\": 0.90,\n    \"create_new\": false,\n    \"new_type_suggestion\": null\n  },\n  \"custom_fields\": {\n    \"field_updates\": {\n      \"123\": \"extracted_value_1\",\n      \"456\": \"extracted_value_2\"\n    },\n    \"confidence\": 0.85,\n    \"new_fields_needed\": []\n  },\n  \"tags\": {\n    \"existing_tag_names\": [\"tag1\", \"tag2\"],\n    \"new_tags_needed\": [],\n    \"confidence\": 0.80\n  },\n  \"processing_notes\": \"Explain decisions and any limitations\"\n}\n\nEXAMPLES OF CORRECT CORRESPONDENT EXTRACTION:\n- Document from Amazon about a purchase → correspondent.name: \"Amazon\"\n- Invoice from Magenta Telekom → correspondent.name: \"Magenta Telekom\"\n- Letter from AMS (Arbeitsmarktservice) → correspondent.name: \"AMS\"\n- Insurance statement from Helvetia → correspondent.name: \"Helvetia\"\n- Receipt from a local shop \"Tech Store\" → correspondent.name: \"Tech Store\"\n\nIMPORTANT:\n- Use get_document_types, get_custom_fields, get_tags tools first\n- Prefer existing entities over creating new ones\n- Include confidence scores for all recommendations\n- Handle errors gracefully in your analysis\n- If you cannot analyze something, explain why in processing_notes\n- **Do NOT use document type as correspondent** (e.g., don't use \"Invoice\" as correspondent.name)\n- Return valid JSON only\n`;\n\nconst result = {\n  ...(documentData.json || {}),\n  ai_prompt: prompt,\n  document_id: documentId,\n  custom_fields_available: customFieldsData.length,\n  processing_context: {\n    has_content: !!(documentData.json.content),\n    has_custom_fields: customFieldsData.length > 0,\n    document_valid: !!(documentId && documentId !== 'unknown')\n  }\n};\n\nconsole.log(`Prepared AI prompt for document ${documentId} with ${customFieldsData.length} custom fields available`);\nconsole.log('✅ Prompt includes correspondent extraction instructions');\nreturn { json: result };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        192
+      ],
+      "id": "4e652b75-03e6-4ff9-b5c8-4c0aa596fdc5",
+      "name": "Prepare AI Prompt"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -2272,
+        416
+      ],
+      "id": "e342527e-806c-423e-bd9a-580b6e095ce7",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "q2ww8qgWPCMRnlG0",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.ai_prompt }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -2192,
+        192
+      ],
+      "id": "b2ccbaf5-f9de-44c8-b8aa-80976def86d6",
+      "name": "AI Document Analyzer"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Provides document types saved in the system in the Paperless NGX ",
+        "url": "=https://paperless.zenmedia.live/api/document_types/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -2112,
+        416
+      ],
+      "id": "aeebe710-5397-4014-a568-594c628e0ffb",
+      "name": "get_document_types",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Provide the custom_fields saved in the system",
+        "url": "=https://paperless.zenmedia.live/api/custom_fields/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -1920,
+        416
+      ],
+      "id": "3e5a95ce-ef3e-443f-9a8b-ea3fcf2712c7",
+      "name": "get_custom_fields",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Provide the tags saved in the system",
+        "url": "=https://paperless.zenmedia.live/api/tags/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -1792,
+        416
+      ],
+      "id": "bb98df9b-411d-4082-a043-422e05a19b36",
+      "name": "get_tags",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "41d9541d-b8f5-4fae-a04f-c25e414e79de",
+              "name": "document_id",
+              "value": "={{ $('Prepare AI Prompt').item.json.id }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1840,
+        192
+      ],
+      "id": "0240b434-e5bb-45c6-b34a-fe615a1ef338",
+      "name": "Pass Document ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validation Failed Handler\nconst result = {\n  status: 'error',\n  error_type: 'authentication_failed',\n  message: 'Invalid webhook token - authentication failed',\n  timestamp: new Date().toISOString(),\n  workflow_terminated: true\n};\n\nconsole.error('❌ WORKFLOW TERMINATED: Invalid webhook token');\n\nreturn { json: result };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2704,
+        400
+      ],
+      "id": "50c0a447-aa91-49a0-9fd6-82540b75e25b",
+      "name": "Validation Failed",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paperless.zenmedia.live/api/correspondents/?name__iexact={{ encodeURIComponent($json.correspondent_name) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1184,
+        192
+      ],
+      "id": "check-correspondent-exists-v141",
+      "name": "Check Correspondent Exists",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-correspondent",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "correspondent-exists-v141",
+      "name": "Correspondent Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://paperless.zenmedia.live/api/correspondents/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"name\": $(\"Consolidated Processor\").first().json.correspondent_name, \"matching_algorithm\": 6} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -960,
+        384
+      ],
+      "id": "create-correspondent-v141",
+      "name": "Create Correspondent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Consolidated Processor').first().json;\nconst checkResult = $('Check Correspondent Exists').first().json;\nconst createResult = $input.first().json;\n\n// CHECK FOR HTTP ERROR from Create Correspondent\nif (createResult && (createResult.error || createResult.statusCode >= 400)) {\n  console.error('HTTP ERROR from Create Correspondent:');\n  console.error('  Status: ' + (createResult.statusCode || 'unknown'));\n  console.error('  Error: ' + (createResult.error || 'unknown'));\n  console.error('  Message: ' + (createResult.message || 'unknown'));\n  console.error('  Response body: ' + JSON.stringify(createResult, null, 2));\n  throw new Error('Create Correspondent HTTP request failed: ' + (createResult.message || createResult.error || 'Unknown error'));\n}\n\nlet correspondentId = null;\nlet action = 'unknown';\n\nif (checkResult && checkResult.count > 0) {\n  correspondentId = checkResult.results[0].id;\n  action = 'matched';\n  console.log('Matched correspondent ID: ' + correspondentId);\n} else if (createResult && createResult.id) {\n  correspondentId = createResult.id;\n  action = 'created';\n  console.log('Created correspondent ID: ' + correspondentId);\n}\n\nif (!correspondentId) {\n  console.error('ERROR: No correspondent ID found!');\n  console.error('Check result count: ' + (checkResult ? checkResult.count : 'null'));\n  console.error('Create result has id: ' + !!(createResult && createResult.id));\n  console.error('Create result full object: ' + JSON.stringify(createResult, null, 2));\n  throw new Error('Failed to get correspondent ID');\n}\n\nreturn {json: {...data, correspondent_id: correspondentId, correspondent_action: action}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        192
+      ],
+      "id": "get-correspondent-id-v141",
+      "name": "Get Correspondent ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst category = data.storage_category || 'reference-documents';\nconst correspondent = data.correspondent_name || 'Unknown';\n\nconst correspondentSlug = correspondent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');\nconst pathTemplate = category + '/' + correspondentSlug + '/{created_year}-{created_month}-{created_day}-{title}';\nconst pathName = category + ' - ' + correspondent;\n\nconsole.log('Storage Path: ' + pathTemplate);\n\nreturn {json: {...data, storage_path_template: pathTemplate, storage_path_name: pathName}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        192
+      ],
+      "id": "generate-storage-path-v141",
+      "name": "Generate Storage Path"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://paperless.zenmedia.live/api/storage_paths/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -240,
+        192
+      ],
+      "id": "check-storage-paths-v141",
+      "name": "Check Storage Paths",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allPaths = $input.first().json;\nconst data = $('Generate Storage Path').first().json;\nconst targetTemplate = data.storage_path_template;\nconst targetName = data.storage_path_name;\n\nconsole.log('Looking for storage path:');\nconsole.log('  Name: ' + targetName);\nconsole.log('  Template: ' + targetTemplate);\n\n// Check both name and path to avoid unique constraint errors\nconst existing = allPaths.results.find(function(sp) {\n  return sp.name === targetName || sp.path === targetTemplate;\n});\n\nif (existing) {\n  console.log('Found existing storage path:');\n  console.log('  ID: ' + existing.id);\n  console.log('  Name: ' + existing.name);\n  console.log('  Path: ' + existing.path);\n  console.log('  Match type: ' + (existing.name === targetName ? 'by name' : 'by path'));\n  return {json: {...data, storage_path_id: existing.id, storage_path_exists: true}};\n} else {\n  console.log('No matching storage path found, will create new one');\n  return {json: {...data, storage_path_id: null, storage_path_exists: false}};\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        192
+      ],
+      "id": "match-storage-path-v141",
+      "name": "Match Storage Path"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "storage-path-needs-creation",
+              "leftValue": "={{ $json.storage_path_exists }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-storage-path-v141",
+      "name": "Create Storage Path?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        240,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://paperless.zenmedia.live/api/storage_paths/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\"name\": $json.storage_path_name, \"path\": $json.storage_path_template, \"matching_algorithm\": 0} }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        240,
+        384
+      ],
+      "id": "create-storage-path-v141",
+      "name": "Create Storage Path",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GM3oN9AzRgfeA7ZZ",
+          "name": "PaperlessAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Storage Path ID from either existing or newly created\nconsole.log('=== GET STORAGE PATH ID ===');\n\n// Always get base data from Match Storage Path node\nconst matchResult = $('Match Storage Path').first().json;\nconst createResult = $input.first().json;\n\n// CHECK FOR HTTP ERROR from Create Storage Path\nif (createResult && (createResult.error || createResult.statusCode >= 400)) {\n  console.error('HTTP ERROR from Create Storage Path:');\n  console.error('  Status: ' + (createResult.statusCode || 'unknown'));\n  console.error('  Error: ' + (createResult.error || 'unknown'));\n  console.error('  Message: ' + (createResult.message || 'unknown'));\n  console.error('  Response body: ' + JSON.stringify(createResult, null, 2));\n  throw new Error('Create Storage Path HTTP request failed: ' + (createResult.message || createResult.error || 'Unknown error'));\n}\n\nlet storagePathId = null;\nlet source = 'unknown';\n\n// Check if storage path already existed (from Match Storage Path)\nif (matchResult.storage_path_id) {\n  storagePathId = matchResult.storage_path_id;\n  source = 'existing';\n  console.log('Using existing storage path ID: ' + storagePathId);\n} else {\n  // Storage path was just created - get from current input\n  if (createResult && createResult.id) {\n    storagePathId = createResult.id;\n    source = 'created';\n    console.log('Created new storage path ID: ' + storagePathId);\n    console.log('  Name: ' + createResult.name);\n    console.log('  Path: ' + createResult.path);\n  }\n}\n\n// ERROR HANDLING: Stop if no storage path ID\nif (!storagePathId) {\n  console.error('ERROR: No storage path ID found!');\n  console.error('Match result has storage_path_id: ' + !!matchResult.storage_path_id);\n  console.error('Input has id: ' + !!($input.first().json && $input.first().json.id));\n  console.error('Create result full object: ' + JSON.stringify(createResult, null, 2));\n  throw new Error('Failed to get storage path ID - check Create Storage Path node');\n}\n\nconsole.log('Storage Path ID: ' + storagePathId + ' (source: ' + source + ')');\n\nreturn {json: {...matchResult, storage_path_id: storagePathId, storage_path_source: source}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        192
+      ],
+      "id": "get-storage-path-id-v141",
+      "name": "Get Storage Path ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('=== BUILD UPDATE PAYLOAD ===');\nconst data = $input.first().json;\n\nconst payload = {};\n\nif (data.update_payload && data.update_payload.custom_fields) {\n  payload.custom_fields = data.update_payload.custom_fields;\n  console.log('Custom fields: ' + payload.custom_fields.length);\n}\n\nif (data.correspondent_id) {\n  payload.correspondent = data.correspondent_id;\n  console.log('Correspondent ID: ' + data.correspondent_id);\n}\n\nif (data.storage_path_id) {\n  payload.storage_path = data.storage_path_id;\n  console.log('Storage Path ID: ' + data.storage_path_id);\n}\n\nif (data.update_payload && data.update_payload.document_type) {\n  payload.document_type = data.update_payload.document_type;\n  console.log('Document Type ID: ' + payload.document_type);\n}\n\nconst hasUpdates = Object.keys(payload).length > 0;\nconsole.log('Has updates: ' + hasUpdates);\n\nreturn {json: {document_id: data.document_id, update_payload: payload, has_updates: hasUpdates, processing_summary: data.processing_summary || {}}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        192
+      ],
+      "id": "build-update-payload-v141",
+      "name": "Build Update Payload"
+    }
+  ],
+  "pinData": {
+    "Paperless Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.zakitraki.com",
+            "user-agent": "python-httpx/0.28.1",
+            "content-length": "192",
+            "accept": "*/*",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkNmU1ZDQ3NS0zZjRmLTRmOTMtYTRiOS05Mzk1NmI4ZTJiOWMiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzYxOTIwMjIxLCJleHAiOjE3OTM0MDEyMDB9.IY78_TE4VDrwNhM4bTMj-JCSQ3x2ubVfvIn1N8e9BiY",
+            "connection": "keep-alive",
+            "content-type": "application/json",
+            "x-api-key": "d9bf2199-6d52-4c0c-be72-4443cc6c2dea",
+            "x-forwarded-for": "10.10.2.5",
+            "x-forwarded-host": "n8n.zakitraki.com",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "zoraxy-8990c893-9419-485c-a8b9-fa912c8a47c2",
+            "x-real-ip": "10.10.2.5"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "added": "2025-12-17T22:01:11.296434+01:00",
+            "owner": "admin",
+            "doc_url": "https://paperless.zenmedia.live/documents/176/",
+            "filename": "0000176",
+            "correspondent": "Magenta",
+            "document_type": "Invoice"
+          },
+          "webhookUrl": "https://n8n.zakitraki.com/webhook/paperless/doc-added",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Process AI Results": {
+      "main": [
+        [
+          {
+            "node": "Consolidated Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidated Processor": {
+      "main": [
+        [
+          {
+            "node": "Check Correspondent Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Updates Needed": {
+      "main": [
+        [
+          {
+            "node": "Update Document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Processing Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Document": {
+      "main": [
+        [
+          {
+            "node": "Final Processing Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paperless Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Webhook Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Webhook Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Document Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Document Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Document Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Document Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Pass Document ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass Document ID": {
+      "main": [
+        [
+          {
+            "node": "Process AI Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Document Analyzer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_document_types": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Document Analyzer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_custom_fields": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Document Analyzer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_tags": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Document Analyzer",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Tag Names to IDs": {
+      "main": [
+        [
+          {
+            "node": "Check if Updates Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Available Tags": {
+      "main": [
+        [
+          {
+            "node": "Map Tag Names to IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Correspondent Exists": {
+      "main": [
+        [
+          {
+            "node": "Correspondent Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Correspondent Exists?": {
+      "main": [
+        [
+          {
+            "node": "Get Correspondent ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Correspondent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Correspondent": {
+      "main": [
+        [
+          {
+            "node": "Get Correspondent ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Correspondent ID": {
+      "main": [
+        [
+          {
+            "node": "Generate Storage Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Storage Path": {
+      "main": [
+        [
+          {
+            "node": "Check Storage Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Storage Paths": {
+      "main": [
+        [
+          {
+            "node": "Match Storage Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Storage Path": {
+      "main": [
+        [
+          {
+            "node": "Create Storage Path?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Storage Path?": {
+      "main": [
+        [
+          {
+            "node": "Create Storage Path",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Storage Path ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Storage Path": {
+      "main": [
+        [
+          {
+            "node": "Get Storage Path ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Storage Path ID": {
+      "main": [
+        [
+          {
+            "node": "Build Update Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Update Payload": {
+      "main": [
+        [
+          {
+            "node": "Check if Updates Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "saveDataSuccessExecution": "all"
+  },
+  "versionId": "5cb91d4e-2e1f-4bfa-9ca6-939f0bfa386b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "585a40e69426ffa79544e8cfdd288c324cb49fec34f1409434a96c937d82eeab"
+  },
+  "id": "lMYyn3sAUXYKJ8oS",
+  "tags": []
+}
