@@ -236,6 +236,46 @@ After each test document:
 2. Verify correspondent name is valid (not "Unknown" or empty)
 3. Check Paperless API permissions
 
+### Error: "Object violates owner / name unique constraint" (v14.2+)
+
+**Symptom**: 400 error when creating storage path or correspondent
+
+**Cause**: Workflow trying to create entity that already exists (pagination or race condition)
+
+**Fixes in v14.2**:
+
+- Storage path pagination increased to 1000 entries
+- Better error messages explaining the issue
+- Correspondent name normalization to prevent duplicates
+
+**If error persists**:
+
+1. Check "Check Storage Paths" node has `page_size=1000` parameter
+2. If you have >1000 storage paths, contact for pagination fix
+3. Re-upload document - entity should now exist
+4. Check logs for "UNIQUE CONSTRAINT ERROR" message with details
+
+### Duplicate Correspondents Created
+
+**Symptom**: "Magenta" and "Magenta Telekom" exist as separate correspondents
+
+**Fix (v14.2+)**: Correspondent normalization is now automatic
+
+- Strips legal suffixes (GmbH, KG, LLC, Inc, etc.)
+- Applies alias rules (e.g., "Magenta" → "Magenta Telekom")
+- Title-cases names for consistency
+
+**Verify normalization**:
+
+Check "Generate Storage Path" node logs for:
+
+```log
+Normalized: "Magenta Telekom GmbH" → "Magenta Telekom"
+Alias match: "Magenta" → "Magenta Telekom"
+```
+
+**Manual cleanup**: Merge duplicate correspondents in Paperless-ngx admin panel
+
 ---
 
 ## Performance Expectations

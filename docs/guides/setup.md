@@ -124,14 +124,16 @@ chmod +x scripts/setup/create_select_fields.sh
 After creating custom fields, you need to update the workflow with your actual field IDs.
 
 1. Get your field IDs:
+
 ```bash
 curl -H "Authorization: Token YOUR_TOKEN" \
   https://your-paperless-domain.com/api/custom_fields/ | python -m json.tool
 ```
 
-2. In the workflow file `workflows/current/paperless-ai-automation.json`, find the "Consolidated Processor" node
+1. In the workflow file `workflows/current/paperless-ai-automation.json`, find the "Consolidated Processor" node
 
-3. Update the `FIELD_IDS` constant:
+2. Update the `FIELD_IDS` constant:
+
 ```javascript
 const FIELD_IDS = {
   SLA_DEADLINE: 34,           // Your ID here
@@ -142,7 +144,8 @@ const FIELD_IDS = {
 };
 ```
 
-4. Update the `OPTION_ID_MAPS` with your option IDs:
+1. Update the `OPTION_ID_MAPS` with your option IDs:
+
 ```javascript
 const OPTION_ID_MAPS = {
   OBLIGATION_TYPE: {
@@ -207,11 +210,13 @@ The workflow is triggered when documents are uploaded to Paperless.
 ### Security Considerations
 
 **For Production**:
+
 - Use HTTPS for webhook URL
 - Add authentication token validation in n8n
 - Restrict network access to n8n instance
 
 **For Testing**:
+
 - HTTP with localhost is fine
 - Ensure firewall allows Paperless → n8n communication
 
@@ -294,6 +299,7 @@ chmod +x scripts/setup/*.sh
 ## Next Steps
 
 After completing setup:
+
 1. Review [Architecture Overview](../architecture/overview.md)
 2. Deploy the workflow using [Deployment Guide](deployment.md)
 3. Test with sample documents

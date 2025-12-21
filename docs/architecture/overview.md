@@ -4,7 +4,7 @@
 
 The Paperless-ngx AI Document Automation system uses a **four-stage processing pipeline**:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │ Stage 1: AI Analysis & Classification                   │
 │ • GPT-4 extracts metadata from document content         │
@@ -43,6 +43,7 @@ The Paperless-ngx AI Document Automation system uses a **four-stage processing p
 **Paperless-ngx is entity-based, not string-based.**
 
 ### ❌ Wrong Approach (v13 and earlier)
+
 ```json
 {
   "storage_path": "financial-tracking/magenta/2025",  // String - doesn't work!
@@ -54,6 +55,7 @@ The Paperless-ngx AI Document Automation system uses a **four-stage processing p
 Result: Metadata saved to database, but **files not organized on disk**.
 
 ### ✅ Correct Approach (v14+)
+
 ```json
 {
   "storage_path": 42,      // Entity ID - files actually move!
@@ -80,14 +82,17 @@ Paperless entities must exist before you can reference them. The workflow:
 ### Entity Types
 
 #### 1. Storage Paths
+
 **Purpose**: Control physical file organization
 
 **Template Format**:
-```
+
+```variables
 {category}/{correspondent}/{created_year}-{created_month}-{created_day}-{title}
 ```
 
 **Examples**:
+
 - `financial-tracking/magenta/2025-12-19-Invoice-123.pdf`
 - `legal-obligations/ams/2025-12-20-Kontrolltermin.pdf`
 - `reference-documents/helvetia/2025-12-18-Policy-Change.pdf`
@@ -95,9 +100,11 @@ Paperless entities must exist before you can reference them. The workflow:
 **Created when**: First document from a correspondent in a category
 
 #### 2. Correspondents
+
 **Purpose**: Track document senders/issuers
 
 **Examples**:
+
 - Magenta Telekom (financial)
 - AMS - Arbeitsmarktservice (government)
 - Helvetia Versicherungen AG (insurance)
@@ -105,9 +112,11 @@ Paperless entities must exist before you can reference them. The workflow:
 **Created when**: AI identifies a new correspondent name
 
 #### 3. Document Types
+
 **Purpose**: Classify documents by type
 
 **Examples**:
+
 - Invoice
 - Contract
 - Insurance Policy
@@ -116,9 +125,11 @@ Paperless entities must exist before you can reference them. The workflow:
 **Created when**: AI suggests a document type that doesn't exist
 
 #### 4. Tags
+
 **Purpose**: Flexible categorization
 
 **Examples**:
+
 - urgent
 - action-required
 - tax-relevant
@@ -131,7 +142,7 @@ Paperless entities must exist before you can reference them. The workflow:
 
 ### Complete Processing Flow
 
-```
+```schema
 1. User uploads PDF to Paperless-ngx
    ↓
 2. Paperless webhook triggers n8n workflow
@@ -182,10 +193,12 @@ Paperless entities must exist before you can reference them. The workflow:
 ### Problem: AI May Suggest Redundant Data
 
 **Example**:
+
 - Document Type: "Invoice"
 - AI suggests tag: "invoice" ← **REDUNDANT**
 
 **Example**:
+
 - Correspondent: "Magenta Telekom"
 - AI suggests tag: "magenta" ← **REDUNDANT**
 
@@ -219,7 +232,7 @@ Custom fields store **non-entity metadata** that doesn't fit Paperless's built-i
 ### Required Fields
 
 | Field ID | Name | Type | Purpose |
-|----------|------|------|---------|
+| -------- | ---- | ---- | ------- |
 | 34 | SLA Deadline | Date | Action deadline for obligations |
 | 35 | Obligation Type | Select | hard_obligation, soft_tracking, informational, none |
 | 36 | Risk Level | Select | critical, high, medium, low |
@@ -231,11 +244,13 @@ Custom fields store **non-entity metadata** that doesn't fit Paperless's built-i
 Paperless select fields require **option IDs**, not label strings.
 
 **❌ Wrong**:
+
 ```json
 {"field": 35, "value": "hard_obligation"}  // String - causes API 400 error
 ```
 
 **✅ Correct**:
+
 ```json
 {"field": 35, "value": "YumCdzEuieiKcVDI"}  // Option ID - works!
 ```
@@ -297,12 +312,14 @@ Risk level determines SLA deadlines and priority:
 ## Performance Characteristics
 
 ### Processing Time
+
 - **AI Analysis**: 3-5 seconds (GPT-4 API call)
 - **First document from correspondent**: +2 seconds (entity creation)
 - **Subsequent documents**: +0.5 seconds (entity matching)
 - **Total average**: 5-10 seconds per document
 
 ### Entity Reuse
+
 - **First Magenta invoice**: Creates correspondent + storage path
 - **Second Magenta invoice**: Reuses both entities (fuzzy match)
 - **100th Magenta invoice**: Still reuses same entities
@@ -321,6 +338,7 @@ Risk level determines SLA deadlines and priority:
 ## Next Steps
 
 For implementation details, see:
+
 - [Entity-Based Design](entity-based-design.md) - Deep dive into entity management
 - [Deployment Guide](../guides/deployment.md) - How to deploy the workflow
 - [Development Guide](../development/implementation-guide.md) - How to extend the workflow

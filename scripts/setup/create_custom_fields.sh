@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Paperless-ngx Enhanced Custom Fields Creation Script
-# Creates 6 custom fields for AI-powered obligation tracking
+# Creates 5 custom fields for AI-powered obligation tracking
+# NOTE: v14+ uses Paperless's built-in storage_path entity, not a custom field
 
 PAPERLESS_URL="https://your-paperless-domain.com"
 # Load token from environment file
@@ -54,24 +55,22 @@ create_field() {
     echo ""
 }
 
-# Create all 6 enhanced custom fields
+# Create all 5 enhanced custom fields
+# NOTE: Storage Path is NOT created here - v14+ uses Paperless's built-in storage_path entity
 
-echo "Creating field 1/6: Obligation Type"
+echo "Creating field 1/5: Obligation Type"
 create_field "Obligation Type" "select" '{"select_options": ["hard_obligation", "soft_tracking", "informational", "none"]}'
 
-echo "Creating field 2/6: Risk Level"
+echo "Creating field 2/5: Risk Level"
 create_field "Risk Level" "select" '{"select_options": ["critical", "high", "medium", "low"]}'
 
-echo "Creating field 3/6: Storage Path"
-create_field "Storage Path" "string" ''
-
-echo "Creating field 4/6: Correspondent Category"
+echo "Creating field 3/5: Correspondent Category"
 create_field "Correspondent Category" "select" '{"select_options": ["government", "insurance", "financial", "health", "commercial", "technical"]}'
 
-echo "Creating field 5/6: Monitoring Status"
+echo "Creating field 4/5: Monitoring Status"
 create_field "Monitoring Status" "select" '{"select_options": ["active", "pending", "completed", "archived"]}'
 
-echo "Creating field 6/6: SLA Deadline"
+echo "Creating field 5/5: SLA Deadline"
 create_field "SLA Deadline" "date" ''
 
 echo "====================================================="
@@ -94,9 +93,12 @@ echo "};"
 
 echo ""
 echo "====================================================="
-echo "✅ Custom field creation complete!"
+echo "✅ Custom field creation complete! (5 fields created)"
+echo ""
+echo "NOTE: Storage Path is managed via Paperless's built-in storage_path entity"
+echo "      (not a custom field). The workflow handles this automatically."
 echo ""
 echo "Next steps:"
 echo "1. Copy the field IDs above into your n8n workflow"
-echo "2. Update TODO_TRACKER.md with the field IDs"
-echo "3. Proceed to TODO 3: Backup n8n workflow"
+echo "2. Import the workflow to n8n (workflows/current/paperless-ai-automation.json)"
+echo "3. Test with a sample document"
