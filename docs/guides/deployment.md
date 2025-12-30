@@ -18,6 +18,7 @@ The workflow provides:
 - ✅ **Smart storage path generation** with correspondent organization
 - ✅ **Custom field population** (SLA deadlines, risk levels, obligation types)
 - ✅ **Entity-based architecture** for proper file organization
+- ✅ **Optional approval loop** via Teams (Power Automate) for pending fields
 
 ---
 
@@ -109,6 +110,15 @@ To find your field IDs:
 curl -H "Authorization: Token YOUR_TOKEN" \
   https://your-paperless-domain.com/api/custom_fields/
 ```
+
+### Step 4b: Configure Approval Flow (Optional)
+
+If you use Teams approvals, update these nodes:
+
+1. **Send Approval Request**: set the HTTP URL to your Power Automate manual trigger.
+2. **Wait For Approval**: remains in waiting state until the callback is received.
+
+Power Automate must POST the card response to `data.callback_url` from the adaptive card submission.
 
 ### Step 5: Activate Workflow
 
@@ -275,6 +285,15 @@ Alias match: "Magenta" → "Magenta Telekom"
 ```
 
 **Manual cleanup**: Merge duplicate correspondents in Paperless-ngx admin panel
+
+### Approval callback returns 404
+
+**Symptom**: Power Automate HTTP action returns `404` with "no waiting webhook".
+
+**Fix**:
+1. Ensure the execution is in **Waiting** state (n8n Executions view).
+2. POST to the exact `callback_url` from the adaptive card data.
+3. Confirm the HTTP method matches the Wait node (POST by default).
 
 ---
 

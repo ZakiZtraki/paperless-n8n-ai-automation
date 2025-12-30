@@ -776,9 +776,9 @@
     {
       "parameters": {
         "waitType": "webhook",
-        "webhookMethod": "POST",
+        "httpMethod": "POST",
         "options": {
-          "webhookMethod": "POST"
+          "httpMethod": "POST"
         }
       },
       "type": "n8n-nodes-base.wait",

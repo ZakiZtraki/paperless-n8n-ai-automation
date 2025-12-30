@@ -660,7 +660,7 @@
             {
               "id": "39c8d88e-03ff-4d3f-b34e-67d1530b65b9",
               "name": "callback_url",
-              "value": "={{ $execution.resumeUrl }}",
+              "value": "={{ (() => { const resumeUrl = $execution.resumeUrl || ''; const waitId = 'a5b9da3e-36d6-4bb6-b924-829b5afd3003'; if (!resumeUrl) return null; return resumeUrl.includes(waitId) ? resumeUrl : `${resumeUrl}/${waitId}`; })() }}",
               "type": "string"
             }
           ]
@@ -776,9 +776,9 @@
     {
       "parameters": {
         "waitType": "webhook",
-        "webhookMethod": "POST",
+        "httpMethod": "POST",
         "options": {
-          "webhookMethod": "POST"
+          "httpMethod": "POST"
         }
       },
       "type": "n8n-nodes-base.wait",

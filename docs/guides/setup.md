@@ -38,6 +38,14 @@ PAPERLESS_URL_PUBLIC="https://your-paperless-domain.com"
 PAPERLESS_URL_LAN="http://192.168.1.100"  # Optional: LAN access
 ```
 
+If you use the Teams approval loop, also set:
+
+```bash
+PA_APPROVAL_FLOW_URL="https://default-tenant.environment.api.powerplatform.com/.../invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=..."
+PA_TEAMS_GROUP_ID="YOUR_TEAMS_GROUP_ID"
+PA_TEAMS_CHANNEL_ID="YOUR_TEAMS_CHANNEL_ID"
+```
+
 ### Generating the API Token
 
 1. Log into Paperless-ngx web interface
@@ -219,6 +227,20 @@ The workflow is triggered when documents are uploaded to Paperless.
 
 - HTTP with localhost is fine
 - Ensure firewall allows Paperless → n8n communication
+
+---
+
+## Step 4b: Configure Power Automate Approval (Optional)
+
+This workflow can pause for human approval when custom fields or new fields need confirmation.
+
+### Power Automate Flow Requirements
+
+1. Create a flow with an HTTP trigger that receives the adaptive card payload.
+2. Post the card to Teams and collect the response.
+3. Send the response to the `callback_url` provided in the card data.
+
+**Important**: Do not hardcode the callback URL. Always POST to the `data.callback_url` included with the card submission.
 
 ---
 

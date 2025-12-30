@@ -180,13 +180,29 @@ Paperless entities must exist before you can reference them. The workflow:
      ]
    }
    ↓
-8. Update Document (HTTP PATCH to Paperless API)
+8. Approval Loop (optional):
+   - If pending fields/new fields exist, send adaptive card via Power Automate
+   - Include callback_url (execution resume URL) in the card payload
+   - Wait for the response and apply decisions
    ↓
-9. Paperless organizes file on disk:
+9. Update Document (HTTP PATCH to Paperless API)
+   ↓
+10. Paperless organizes file on disk:
    /media/documents/originals/financial-tracking/magenta/2025-12-19-Invoice-123.pdf
 ```
 
 ---
+
+## Approval Loop (Optional)
+
+When the AI flags custom fields or new field suggestions for approval, the workflow:
+
+1. Builds an adaptive card with toggles for each field.
+2. Sends the card to Teams via Power Automate.
+3. Waits on the n8n resume URL (`callback_url`).
+4. Applies the approved values and continues the normal update flow.
+
+This keeps the execution in a single continuous run and avoids static webhook callbacks.
 
 ## Metadata Safeguards
 

@@ -655,30 +655,6 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "39c8d88e-03ff-4d3f-b34e-67d1530b65b9",
-              "name": "callback_url",
-              "value": "={{ $execution.resumeUrl }}",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        24320,
-        8864
-      ],
-      "id": "f3e3f915-893d-4a72-8e28-7e84352cb7ea",
-      "name": "Set Approval Callback"
-    },
-    {
-      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -744,7 +720,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Prepare approval request for pending metadata\nconst data = $('Set Approval Callback').first().json;\nconst customFieldsResult = $input.first().json;\n\nconst customFields = Array.isArray(customFieldsResult?.results)\n  ? customFieldsResult.results\n  : Array.isArray(customFieldsResult)\n    ? customFieldsResult\n    : [];\n\nconst fieldsById = new Map(customFields.map(field => [field.id, field.name]));\nconst pendingFields = Array.isArray(data.pending_custom_fields) ? data.pending_custom_fields : [];\nconst newFieldsNeededRaw = Array.isArray(data.new_fields_needed) ? data.new_fields_needed : [];\n\nconst normalizedNewFields = newFieldsNeededRaw.map((item, index) => {\n  if (typeof item == 'string') {\n    return { id: index, name: item, value: null };\n  }\n  if (item && typeof item == 'object') {\n    const name = item.name || item.field || item.label || item.title || `New Field ${index + 1}`;\n    const value = item.value !== undefined ? item.value : null;\n    return { id: index, name, value };\n  }\n  return { id: index, name: String(item), value: null };\n});\n\nconst approvalId = `${data.document_id}-${Date.now()}`;\nconst documentUrl = `https://paperless.zenmedia.live/documents/${data.document_id}/`;\nconst callbackUrl = data.callback_url || null;\n\nconst pendingFieldSummary = pendingFields.map(item => ({\n  field_id: item.field,\n  field_name: fieldsById.get(item.field) || `Field ${item.field}`,\n  value: item.value\n}));\n\nconst approvalPayload = {\n  approval_id: approvalId,\n  document_id: data.document_id,\n  document_url: documentUrl,\n  correspondent: data.correspondent_name || null,\n  document_type: data.processing_summary?.document_type?.type_name || null,\n  pending_fields: pendingFieldSummary,\n  new_fields_needed: normalizedNewFields,\n  timeout_hours: 24,\n  timeout_action: 'reject',\n  callback_url: callbackUrl\n};\n\nconst approvalContext = {\n  approval_id: approvalId,\n  document_id: data.document_id,\n  pending_fields: pendingFields,\n  new_fields_needed: normalizedNewFields,\n  base_data: {\n    update_payload: data.update_payload || {},\n    correspondent_id: data.correspondent_id || null,\n    storage_path_id: data.storage_path_id || null\n  },\n  callback_url: callbackUrl\n};\n\nconst fieldBlocks = pendingFieldSummary.map(item => ({\n  type: 'Container',\n  items: [\n    {\n      type: 'TextBlock',\n      text: `• ${item.field_name}: ${item.value}`,\n      wrap: true\n    },\n    {\n      type: 'Input.Toggle',\n      id: `field_${item.field_id}`,\n      title: 'Approve',\n      value: 'false'\n    }\n  ]\n}));\n\nconst pendingFieldSection = fieldBlocks.length > 0\n  ? fieldBlocks\n  : [{\n      type: 'TextBlock',\n      text: 'No pending field values to approve.',\n      wrap: true\n    }];\n\nconst newFieldBlocks = normalizedNewFields.map(item => ({\n  type: 'Container',\n  items: [\n    {\n      type: 'TextBlock',\n      text: item.value !== null && item.value !== ''\n        ? `• ${item.name}: ${item.value}`\n        : `• ${item.name}`,\n      wrap: true\n    },\n    {\n      type: 'Input.Toggle',\n      id: `new_field_${item.id}`,\n      title: 'Approve',\n      value: 'false'\n    }\n  ]\n}));\n\nconst newFieldSection = newFieldBlocks.length > 0\n  ? newFieldBlocks\n  : [{\n      type: 'TextBlock',\n      text: 'No new fields suggested.',\n      wrap: true\n    }];\n\nconst approvalCard = {\n  type: 'AdaptiveCard',\n  $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',\n  version: '1.5',\n  body: [\n    {\n      type: 'TextBlock',\n      text: 'Paperless metadata approval',\n      weight: 'Bolder',\n      size: 'Medium'\n    },\n    {\n      type: 'TextBlock',\n      text: `Document ${data.document_id} • ${data.processing_summary?.document_type?.type_name || 'Unknown type'} • ${data.correspondent_name || 'Unknown correspondent'}`,\n      wrap: true\n    },\n    {\n      type: 'TextBlock',\n      text: `[Open document](${documentUrl})`,\n      wrap: true\n    },\n    {\n      type: 'TextBlock',\n      text: 'Pending field values',\n      weight: 'Bolder',\n      spacing: 'Medium'\n    },\n    ...pendingFieldSection,\n    {\n      type: 'TextBlock',\n      text: 'New fields suggested',\n      weight: 'Bolder',\n      spacing: 'Medium'\n    },\n    ...newFieldSection\n  ],\n  actions: [\n    {\n      type: 'Action.Submit',\n      title: 'Approve All',\n      data: {\n        decision: 'approve_all',\n        ...approvalContext\n      }\n    },\n    {\n      type: 'Action.Submit',\n      title: 'Reject All',\n      data: {\n        decision: 'reject_all',\n        ...approvalContext\n      }\n    },\n    {\n      type: 'Action.Submit',\n      title: 'Submit Selections',\n      data: {\n        decision: 'field_decisions',\n        ...approvalContext\n      }\n    }\n  ]\n};\n\nconst pendingRecord = {\n  approval_id: approvalId,\n  document_id: data.document_id,\n  base_data: data,\n  pending_custom_fields: pendingFields,\n  new_fields_needed: normalizedNewFields,\n  created_at: new Date().toISOString()\n};\n\nreturn { json: { approval_payload: approvalPayload, approval_card: approvalCard, pending_record: pendingRecord } };"
+        "jsCode": "// Prepare approval request for pending metadata\nconst data = $('Map Tag Names to IDs').first().json;\nconst customFieldsResult = $input.first().json;\n\nconst customFields = Array.isArray(customFieldsResult?.results)\n  ? customFieldsResult.results\n  : Array.isArray(customFieldsResult)\n    ? customFieldsResult\n    : [];\n\nconst fieldsById = new Map(customFields.map(field => [field.id, field.name]));\nconst pendingFields = Array.isArray(data.pending_custom_fields) ? data.pending_custom_fields : [];\nconst newFieldsNeededRaw = Array.isArray(data.new_fields_needed) ? data.new_fields_needed : [];\n\nconst normalizedNewFields = newFieldsNeededRaw.map((item, index) => {\n  if (typeof item == 'string') {\n    return { id: index, name: item, value: null };\n  }\n  if (item && typeof item == 'object') {\n    const name = item.name || item.field || item.label || item.title || `New Field ${index + 1}`;\n    const value = item.value !== undefined ? item.value : null;\n    return { id: index, name, value };\n  }\n  return { id: index, name: String(item), value: null };\n});\n\nconst approvalId = `${data.document_id}-${Date.now()}`;\nconst documentUrl = `https://paperless.zenmedia.live/documents/${data.document_id}/`;\n\nconst pendingFieldSummary = pendingFields.map(item => ({\n  field_id: item.field,\n  field_name: fieldsById.get(item.field) || `Field ${item.field}`,\n  value: item.value\n}));\n\nconst approvalPayload = {\n  approval_id: approvalId,\n  document_id: data.document_id,\n  document_url: documentUrl,\n  correspondent: data.correspondent_name || null,\n  document_type: data.processing_summary?.document_type?.type_name || null,\n  pending_fields: pendingFieldSummary,\n  new_fields_needed: normalizedNewFields,\n  timeout_hours: 24,\n  timeout_action: 'reject',\n  callback_url: 'https://n8n.zakitraki.com/webhook/paperless/field-approval'\n};\n\nconst fieldBlocks = pendingFieldSummary.map(item => ({\n  type: 'Container',\n  items: [\n    {\n      type: 'TextBlock',\n      text: `• ${item.field_name}: ${item.value}`,\n      wrap: true\n    },\n    {\n      type: 'Input.Toggle',\n      id: `field_${item.field_id}`,\n      title: 'Approve',\n      value: 'false'\n    }\n  ]\n}));\n\nconst pendingFieldSection = fieldBlocks.length > 0\n  ? fieldBlocks\n  : [{\n      type: 'TextBlock',\n      text: 'No pending field values to approve.',\n      wrap: true\n    }];\n\nconst newFieldBlocks = normalizedNewFields.map(item => ({\n  type: 'Container',\n  items: [\n    {\n      type: 'TextBlock',\n      text: item.value !== null && item.value !== ''\n        ? `• ${item.name}: ${item.value}`\n        : `• ${item.name}`,\n      wrap: true\n    },\n    {\n      type: 'Input.Toggle',\n      id: `new_field_${item.id}`,\n      title: 'Approve',\n      value: 'false'\n    }\n  ]\n}));\n\nconst newFieldSection = newFieldBlocks.length > 0\n  ? newFieldBlocks\n  : [{\n      type: 'TextBlock',\n      text: 'No new fields suggested.',\n      wrap: true\n    }];\n\nconst approvalCard = {\n  type: 'AdaptiveCard',\n  $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',\n  version: '1.5',\n  body: [\n    {\n      type: 'TextBlock',\n      text: 'Paperless metadata approval',\n      weight: 'Bolder',\n      size: 'Medium'\n    },\n    {\n      type: 'TextBlock',\n      text: `Document ${data.document_id} • ${data.processing_summary?.document_type?.type_name || 'Unknown type'} • ${data.correspondent_name || 'Unknown correspondent'}`,\n      wrap: true\n    },\n    {\n      type: 'TextBlock',\n      text: `[Open document](${documentUrl})`,\n      wrap: true\n    },\n    {\n      type: 'TextBlock',\n      text: 'Pending field values',\n      weight: 'Bolder',\n      spacing: 'Medium'\n    },\n    ...pendingFieldSection,\n    {\n      type: 'TextBlock',\n      text: 'New fields suggested',\n      weight: 'Bolder',\n      spacing: 'Medium'\n    },\n    ...newFieldSection\n  ],\n  actions: [\n    {\n      type: 'Action.Submit',\n      title: 'Approve All',\n      data: {\n        decision: 'approve_all',\n        approval_id: approvalId\n      }\n    },\n    {\n      type: 'Action.Submit',\n      title: 'Reject All',\n      data: {\n        decision: 'reject_all',\n        approval_id: approvalId\n      }\n    },\n    {\n      type: 'Action.Submit',\n      title: 'Submit Selections',\n      data: {\n        decision: 'field_decisions',\n        approval_id: approvalId\n      }\n    }\n  ]\n};\n\nconst pendingRecord = {\n  approval_id: approvalId,\n  document_id: data.document_id,\n  base_data: data,\n  pending_custom_fields: pendingFields,\n  new_fields_needed: normalizedNewFields,\n  created_at: new Date().toISOString()\n};\n\nreturn { json: { approval_payload: approvalPayload, approval_card: approvalCard, pending_record: pendingRecord } };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -754,6 +730,19 @@
       ],
       "id": "2b7929ec-971e-4b17-94ea-c286fe90b1db",
       "name": "Prepare Approval Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store pending approval in workflow static data\nconst input = $input.first().json;\nconst record = input.pending_record;\n\nif (!record || !record.approval_id) {\n  throw new Error('Missing pending_record for approval');\n}\n\nconst store = $getWorkflowStaticData('global');\nif (!store.pendingApprovals) {\n  store.pendingApprovals = {};\n}\n\nstore.pendingApprovals[record.approval_id] = record;\n\nreturn { json: input };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25104,
+        9008
+      ],
+      "id": "64c86125-b628-41c9-935f-33edcc3e56ab",
+      "name": "Store Pending Approval"
     },
     {
       "parameters": {
@@ -775,25 +764,38 @@
     },
     {
       "parameters": {
-        "waitType": "webhook",
-        "webhookMethod": "POST",
-        "options": {
-          "webhookMethod": "POST"
-        }
+        "jsCode": "return { json: { status: 'pending_approval', approval_sent: true } };"
       },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         25552,
         9008
       ],
-      "id": "2b135b6d-8a50-47ad-b964-670116ab162c",
-      "name": "Wait For Approval",
-      "webhookId": "a5b9da3e-36d6-4bb6-b924-829b5afd3003"
+      "id": "a3c65cba-6c9d-4ce5-9407-ade76e36b0ed",
+      "name": "Pending Approval"
     },
     {
       "parameters": {
-        "jsCode": "// Apply approval decisions and build update payload\nconst rawPayload = $json.body || $json || {};\nconst payload = rawPayload.data || rawPayload.value || rawPayload;\n\nconst approvalId = payload.approval_id || payload.approvalId || rawPayload.approval_id || rawPayload.approvalId;\nconst decision = payload.decision || payload.action || rawPayload.decision || rawPayload.action || null;\nconst fieldDecisions = payload.field_decisions || payload.fieldDecisions || rawPayload.field_decisions || rawPayload.fieldDecisions || [];\n\nif (!approvalId) {\n  throw new Error('Approval callback missing approval_id');\n}\n\nconst toggleSource = { ...rawPayload, ...payload };\n\nconst toggleDecisions = Object.keys(toggleSource)\n  .filter(key => key.startsWith('field_'))\n  .map(key => ({\n    field_id: key.replace('field_', ''),\n    approved: toggleSource[key] === true || toggleSource[key] === 'true'\n  }));\n\nconst newFieldDecisions = Object.keys(toggleSource)\n  .filter(key => key.startsWith('new_field_'))\n  .map(key => ({\n    index: Number(key.replace('new_field_', '')),\n    approved: toggleSource[key] === true || toggleSource[key] === 'true'\n  }));\n\nconst effectiveFieldDecisions = fieldDecisions.length > 0 ? fieldDecisions : toggleDecisions;\n\nconst pendingFields = Array.isArray(payload.pending_fields)\n  ? payload.pending_fields\n  : Array.isArray(payload.pending_custom_fields)\n    ? payload.pending_custom_fields\n    : [];\nconst newFields = Array.isArray(payload.new_fields_needed)\n  ? payload.new_fields_needed\n  : Array.isArray(payload.new_fields)\n    ? payload.new_fields\n    : [];\nconst baseData = payload.base_data && typeof payload.base_data === 'object'\n  ? payload.base_data\n  : payload.baseData && typeof payload.baseData === 'object'\n    ? payload.baseData\n    : {};\nconst documentId = payload.document_id || rawPayload.document_id || (approvalId ? String(approvalId).split('-')[0] : null);\n\nif (!documentId) {\n  throw new Error('Approval callback missing document_id');\n}\n\nconst record = {\n  approval_id: approvalId,\n  document_id: documentId,\n  base_data: baseData,\n  pending_custom_fields: pendingFields,\n  new_fields_needed: newFields\n};\n\nif (!record.base_data) {\n  record.base_data = {};\n}\nif (!record.base_data.update_payload) {\n  record.base_data.update_payload = {};\n}\n\nlet approvedFields = [];\nlet approvedNewFields = [];\n\nif (decision === 'approve_all') {\n  approvedFields = record.pending_custom_fields || [];\n} else if (decision === 'reject_all') {\n  approvedFields = [];\n} else if (Array.isArray(effectiveFieldDecisions) && effectiveFieldDecisions.length > 0) {\n  const approvedIds = new Set(\n    effectiveFieldDecisions\n      .filter(item => item.approved === true || item.approved === 'true')\n      .map(item => Number(item.field_id || item.fieldId))\n  );\n  approvedFields = (record.pending_custom_fields || []).filter(item => approvedIds.has(Number(item.field)));\n} else {\n  approvedFields = [];\n}\n\nconst newFieldCandidates = Array.isArray(record.new_fields_needed) ? record.new_fields_needed : [];\n\nif (decision === 'approve_all') {\n  approvedNewFields = newFieldCandidates;\n} else if (decision === 'reject_all') {\n  approvedNewFields = [];\n} else if (Array.isArray(newFieldDecisions) && newFieldDecisions.length > 0) {\n  const approvedIndexes = new Set(\n    newFieldDecisions\n      .filter(item => item.approved === true || item.approved === 'true')\n      .map(item => Number(item.index))\n  );\n  approvedNewFields = newFieldCandidates.filter((item, idx) => approvedIndexes.has(Number(item.id !== undefined ? item.id : idx)));\n}\n\nconst mergedBaseData = record.base_data || {};\nconst existingFields = Array.isArray(mergedBaseData.update_payload?.custom_fields)\n  ? mergedBaseData.update_payload.custom_fields\n  : [];\n\nconst fieldMap = new Map(existingFields.map(item => [Number(item.field), item.value]));\nfor (const item of approvedFields) {\n  fieldMap.set(Number(item.field), item.value);\n}\n\nconst mergedFields = Array.from(fieldMap.entries()).map(([field, value]) => ({ field, value }));\n\nmergedBaseData.update_payload = mergedBaseData.update_payload || {};\nif (mergedFields.length > 0) {\n  mergedBaseData.update_payload.custom_fields = mergedFields;\n}\n\nconst updatePayload = {};\nif (Array.isArray(mergedBaseData.update_payload.custom_fields) && mergedBaseData.update_payload.custom_fields.length > 0) {\n  updatePayload.custom_fields = mergedBaseData.update_payload.custom_fields;\n}\nif (Array.isArray(mergedBaseData.update_payload.tags) && mergedBaseData.update_payload.tags.length > 0) {\n  updatePayload.tags = mergedBaseData.update_payload.tags;\n}\nif (mergedBaseData.correspondent_id) {\n  updatePayload.correspondent = mergedBaseData.correspondent_id;\n}\nif (mergedBaseData.storage_path_id) {\n  updatePayload.storage_path = mergedBaseData.storage_path_id;\n}\nif (mergedBaseData.update_payload.document_type) {\n  updatePayload.document_type = mergedBaseData.update_payload.document_type;\n}\n\nreturn { json: { document_id: record.document_id, update_payload: updatePayload, approval_id: approvalId, approved_new_fields: approvedNewFields } };"
+        "httpMethod": "POST",
+        "path": "paperless/field-approval",
+        "options": {
+          "responseData": "OK"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        19360,
+        9280
+      ],
+      "id": "bbc7ea3d-8f8a-4afd-9072-9da38a4b6fee",
+      "name": "Approval Callback",
+      "webhookId": "bddac281-3fa4-44c8-97ca-20114c8e4ac6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apply approval decisions and build update payload\nconst rawPayload = $json.body || $json || {};\nconst payload = rawPayload.data || rawPayload.value || rawPayload;\n\nconst approvalId = payload.approval_id || payload.approvalId || rawPayload.approval_id || rawPayload.approvalId;\nconst decision = payload.decision || payload.action || rawPayload.decision || rawPayload.action || null;\nconst fieldDecisions = payload.field_decisions || payload.fieldDecisions || rawPayload.field_decisions || rawPayload.fieldDecisions || [];\n\nif (!approvalId) {\n  throw new Error('Approval callback missing approval_id');\n}\n\nconst toggleSource = { ...rawPayload, ...payload };\n\nconst toggleDecisions = Object.keys(toggleSource)\n  .filter(key => key.startsWith('field_'))\n  .map(key => ({\n    field_id: key.replace('field_', ''),\n    approved: toggleSource[key] === true || toggleSource[key] === 'true'\n  }));\n\nconst newFieldDecisions = Object.keys(toggleSource)\n  .filter(key => key.startsWith('new_field_'))\n  .map(key => ({\n    index: Number(key.replace('new_field_', '')),\n    approved: toggleSource[key] === true || toggleSource[key] === 'true'\n  }));\n\nconst effectiveFieldDecisions = fieldDecisions.length > 0 ? fieldDecisions : toggleDecisions;\n\nconst store = $getWorkflowStaticData('global');\nconst pendingApprovals = store.pendingApprovals || {};\nconst record = pendingApprovals[approvalId];\n\nif (!record) {\n  throw new Error('No pending approval found for ID: ' + approvalId);\n}\n\nlet approvedFields = [];\nlet approvedNewFields = [];\n\nif (decision === 'approve_all') {\n  approvedFields = record.pending_custom_fields || [];\n} else if (decision === 'reject_all') {\n  approvedFields = [];\n} else if (Array.isArray(effectiveFieldDecisions) && effectiveFieldDecisions.length > 0) {\n  const approvedIds = new Set(\n    effectiveFieldDecisions\n      .filter(item => item.approved === true || item.approved === 'true')\n      .map(item => Number(item.field_id || item.fieldId))\n  );\n  approvedFields = (record.pending_custom_fields || []).filter(item => approvedIds.has(Number(item.field)));\n} else {\n  approvedFields = [];\n}\n\nconst newFieldCandidates = Array.isArray(record.new_fields_needed) ? record.new_fields_needed : [];\n\nif (decision === 'approve_all') {\n  approvedNewFields = newFieldCandidates;\n} else if (decision === 'reject_all') {\n  approvedNewFields = [];\n} else if (Array.isArray(newFieldDecisions) && newFieldDecisions.length > 0) {\n  const approvedIndexes = new Set(\n    newFieldDecisions\n      .filter(item => item.approved === true || item.approved === 'true')\n      .map(item => Number(item.index))\n  );\n  approvedNewFields = newFieldCandidates.filter((item, idx) => approvedIndexes.has(Number(item.id !== undefined ? item.id : idx)));\n}\n\nconst baseData = record.base_data || {};\nconst existingFields = Array.isArray(baseData.update_payload?.custom_fields)\n  ? baseData.update_payload.custom_fields\n  : [];\n\nconst fieldMap = new Map(existingFields.map(item => [Number(item.field), item.value]));\nfor (const item of approvedFields) {\n  fieldMap.set(Number(item.field), item.value);\n}\n\nconst mergedFields = Array.from(fieldMap.entries()).map(([field, value]) => ({ field, value }));\n\nbaseData.update_payload = baseData.update_payload || {};\nif (mergedFields.length > 0) {\n  baseData.update_payload.custom_fields = mergedFields;\n}\n\nconst updatePayload = {};\nif (Array.isArray(baseData.update_payload.custom_fields) && baseData.update_payload.custom_fields.length > 0) {\n  updatePayload.custom_fields = baseData.update_payload.custom_fields;\n}\nif (Array.isArray(baseData.update_payload.tags) && baseData.update_payload.tags.length > 0) {\n  updatePayload.tags = baseData.update_payload.tags;\n}\nif (baseData.correspondent_id) {\n  updatePayload.correspondent = baseData.correspondent_id;\n}\nif (baseData.storage_path_id) {\n  updatePayload.storage_path = baseData.storage_path_id;\n}\nif (baseData.update_payload.document_type) {\n  updatePayload.document_type = baseData.update_payload.document_type;\n}\n\n// Clean up pending approval\nif (store.pendingApprovals && store.pendingApprovals[approvalId]) {\n  delete store.pendingApprovals[approvalId];\n}\n\nreturn { json: { document_id: record.document_id, update_payload: updatePayload, approval_id: approvalId, approved_new_fields: approvedNewFields } };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1130,17 +1132,6 @@
       "main": [
         [
           {
-            "node": "Set Approval Callback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Approval Callback": {
-      "main": [
-        [
-          {
             "node": "Check Approval Needed",
             "type": "main",
             "index": 0
@@ -1338,6 +1329,17 @@
       "main": [
         [
           {
+            "node": "Store Pending Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Pending Approval": {
+      "main": [
+        [
+          {
             "node": "Send Approval Request",
             "type": "main",
             "index": 0
@@ -1349,14 +1351,14 @@
       "main": [
         [
           {
-            "node": "Wait For Approval",
+            "node": "Pending Approval",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait For Approval": {
+    "Approval Callback": {
       "main": [
         [
           {
